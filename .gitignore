@@ -409,3 +409,5 @@ baseline.json
 
 # Local History for Visual Studio Code
 .history/
+src/CrashBox.TH/appsettings.json
+src/scripts/settings.json
