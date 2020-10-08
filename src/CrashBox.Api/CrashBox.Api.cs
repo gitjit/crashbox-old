@@ -11,6 +11,10 @@ using CrashBox.Cosmos;
 using CrashBox.Models;
 using System.Collections.Generic;
 using System.Linq;
+using SendGrid.Helpers.Mail;
+using System.Text;
+using System.Net.Http;
+using tables;
 
 namespace CrashBox.Api
 {
@@ -118,6 +122,33 @@ namespace CrashBox.Api
 
             return new NotFoundObjectResult("Invalid Request: ");
         }
+
+        [FunctionName("SendEmail")]
+        // It works on UTC time, so ensure you corrected based on PST. 
+        // https://arminreiter.com/2017/02/azure-functions-time-trigger-cron-cheat-sheet/
+        // https://savvytime.com/converter/utc-to-pst
+        // 0 0 13 * * *    means trigger @ 1 PM (13.00) UTC which is 6 AM PST (Every day)
+        // ("0 0 13 * * *")
+        // 0 */1 * * * *"  every 1 minute
+        public void SendEmail([TimerTrigger("0 0 13 * * *")] TimerInfo myTimer,
+            ILogger log, [SendGrid(ApiKey = "SEND_GRID_KEY")] out SendGridMessage message)
+        {
+            _logger = log;
+            string sender = "crashbox.email@gmail.com";
+            string primaryEmail = "jitheshc@gmail.com";
+            message = new SendGridMessage();
+
+            message.From = new EmailAddress(sender);
+            message.AddTo(new EmailAddress(primaryEmail));
+
+            var htmlTable = CreateHTMLEmailContent();
+
+            message.Subject = "CrashBox Daily Digest";
+            //message.PlainTextContent = "Testing my sendgrid function";
+            message.HtmlContent = htmlTable;
+
+        }
+
 
         // This method returns the  crashes insert in the Db based on offset
         // limit : number of documents to be returned from Db
@@ -376,6 +407,67 @@ namespace CrashBox.Api
                 Console.WriteLine("Exception :" + ex.Message);
                 return new StatusCodeResult(503);
             }
+        }
+
+        private string CreateHTMLEmailContent()
+        {
+            try
+            {
+                string tableTop = @"<html><head><style>table,th,td{border:1px solid black;border-collapse: collapse;}th,td {padding: 15px;} table.center {margin-left: auto ; margin-right: auto;}</style></head><body>";
+                string tableBottom = @"</body></html>";
+
+                var result =  GetTop10Crashes("").Result;
+                var topCrashes = result as OkObjectResult;
+
+                if (topCrashes == null) return null;
+                var tp = topCrashes.Value as IEnumerable<TopCrash>;
+                if (tp == null) return null;
+
+                StringBuilder sb = new StringBuilder();
+                using (Html.Table table = new Html.Table(sb, id: "some-id"))
+                {
+                    table.StartHead();
+                    using (var thead = table.AddRow())
+                    {
+                        //thead.AddCell ("Project");
+                        thead.AddCell("Method");
+                        thead.AddCell("Count");
+                    }
+                    table.EndHead();
+                    table.StartBody();
+
+                    foreach (var cr in tp)
+                    {
+                        using (var tr = table.AddRow(classAttributes: "someattributes"))
+                        {
+                            tr.AddCell(cr.Method);
+                            tr.AddCell(cr.Count.ToString());
+                            // string version = crash.App.Replace ("HPSmart.", "");
+                            // string atag = "<a href = https://smartex-stage.azurewebsites.net/crashes/summary/" + crash.Lochash + "/" + version + ">" + crash.Loc + "</a>";
+                            // tr.AddCell (atag);
+                            //tr.AddCell (crash.Count.ToString ());
+                        }
+                    }
+                    table.EndBody();
+
+                    var output = tableTop;
+
+                    output += "<p>Hi team,</p>";
+                    output += "<p> These are the top crashes reported. For more details visit <a href=\"https://crashbox.z5.web.core.windows.net/\">website</a> .This is an auto-generated email from a webjob. If any questions,please contact <a href=\"mailto:crashbox.email@gmail.com\">CrashBox</a>.</p>";
+                    output += "<h4> Top Crashes </h4>";
+
+                    output = output + sb.ToString() + tableBottom;
+                    //var tbl = sb.ToString();
+                    return output;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // _logger.LogError(ex.Message);
+                Console.WriteLine(ex.Message);
+                return "null";
+            }
+
         }
 
     } // Class
