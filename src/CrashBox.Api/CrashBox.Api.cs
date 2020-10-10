@@ -62,7 +62,7 @@ namespace CrashBox.Api
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "crash")] HttpRequest req,
             ILogger log)
         {
-            log.LogInformation("C# HTTP trigger function processed a request.");
+            log.LogInformation("CrashBox: Get Crashes Called...!!!!");
             _logger = log;
             try
             {
